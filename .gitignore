@@ -1,0 +1,17 @@
+# Doc
+/doc
+
+# SIB files
+X-po2s.db
+X-so2p.db
+X-sp2o.db
+
+# Autosave
+*~
+
+# Python compiled
+*.pyc
+
+# IDE
+.project
+.pydevproject
