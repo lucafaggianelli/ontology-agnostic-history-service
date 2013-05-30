@@ -44,6 +44,8 @@ class HistoryClient():
                 history_read_instance, HAS_HISTORY_READ_RESPONSE)
             
             # Store the subscription, to unsubscribe later...
+            # TODO: Clear the request from the SIB and unsubscribe, this should be
+            # done in the handler: build a superclass that does the trick!
             self.readResponseSubscriptions.append(
                 self.m3.load_subscribe_sparql(response_sub_query, handler) )
         

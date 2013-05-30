@@ -173,7 +173,6 @@ class BaseRecognizer(object):
                    self.antlr_version_str))
         elif (self.antlr_version < (3, 1, 0, 0) and
               self.antlr_version != runtime_version):
-            # FIXME: make the runtime compatible with 3.0.1 codegen
             # and remove this block.
             raise RuntimeError(
                 "ANTLR version mismatch: "
@@ -229,7 +228,7 @@ class BaseRecognizer(object):
             return matchedSymbol
 
         if self._state.backtracking > 0:
-            # FIXME: need to return matchedSymbol here as well. damn!!
+            
             raise BacktrackingFailed
 
         matchedSymbol = self.recoverFromMismatchedToken(input, ttype, follow)

@@ -710,7 +710,6 @@ class BaseTree(Tree):
         the list, do so at your own risk.
         """
         
-        # FIXME: mark as deprecated
         return self.children
 
 
@@ -1341,22 +1340,18 @@ class CommonTree(BaseTree):
 
 
     def getChildIndex(self):
-        #FIXME: mark as deprecated
         return self.childIndex
 
 
     def setChildIndex(self, idx):
-        #FIXME: mark as deprecated
         self.childIndex = idx
 
 
     def getParent(self):
-        #FIXME: mark as deprecated
         return self.parent
 
 
     def setParent(self, t):
-        #FIXME: mark as deprecated
         self.parent = t
 
         
@@ -2435,8 +2430,6 @@ class RewriteRuleElementStream(object):
     @see org.antlr.runtime.tree.RewriteRuleSubtreeStream
     @see org.antlr.runtime.tree.RewriteRuleTokenStream
     
-    TODO: add mechanism to detect/puke on modification after reading from
-    stream
     """
 
     def __init__(self, adaptor, elementDescription, elements=None):

@@ -30,8 +30,10 @@ class DatabaseWriter:
                  db_adapter = 'mysql'):
         
         # Import the right adapter
-        # TODO: exit if adapter does not exist
-        self.dbAdapter = importlib.import_module('DatabaseConnector.mysql_adapter')
+        try:
+            self.dbAdapter = importlib.import_module('DatabaseConnector.mysql_adapter')
+        except:
+            sys.exit()
                 
         # Logger
         logging.addLevelName(SQL_LOGGER_LVL, "SQL")
@@ -44,7 +46,6 @@ class DatabaseWriter:
 
         # Should check and raise custom exception, but MySQL will
         # handle the problem itself!
-        # TODO: add adapters here
         #self.connection = MySQLdb.connect(host, user, password)
         self.db = self.dbAdapter.DBAdapter()
         self.connection = self.db.connect({ 'host': host,
@@ -230,9 +231,12 @@ class DatabaseWriter:
             row = cursor.fetchone()
             while row:
                 # {http://arces/person_1: 0}
-                # TODO: add support
-                self.instances[row[1]] = {'id': row[0], 'removed': row[2]}
+                self.instances[row[1]] = {'id': row[0], 'removed': row[2] == 1}
                 row = cursor.fetchone()
+            
+            self.logger.debug('Instances cache:')
+            self.logger.debug(self.instances)
+            
             
             self.logger.info('Names caching: OK')
             return True
@@ -259,8 +263,7 @@ class DatabaseWriter:
 
         klass = klass or 'NULL'
         
-        _i = self._get_uri(instance)
-        instance = _i or instance
+        instance = self._get_uri(instance) or instance
         
         cursor = self.connection.cursor()
         
@@ -271,8 +274,12 @@ class DatabaseWriter:
         self.connection.commit()
 
         # Cache instance
-        last_row_id = self.instances[instance] = cursor.lastrowid
+        last_row_id = cursor.lastrowid
         cursor.close()
+
+        self.instances[instance] = {'id': last_row_id, 'removed': removed}
+        
+        self.logger.debug('Created instance "%s" with ID %d'%(instance, last_row_id))
 
         return last_row_id
     
@@ -288,8 +295,7 @@ class DatabaseWriter:
         """
         
         # Supports both name with or without <>
-        uri = self._get_uri(name)
-        uri = uri or name
+        uri = self._get_uri(name) or name
         
         # TODO: Enhance reliability, commit after executing
         # the property table creation
@@ -346,32 +352,28 @@ class DatabaseWriter:
         for triple in triples:
             # Unpack triple, _t is True for uri or False for literal
             _s, _p, _o, _t = triple
+            _s = str(_s); _p = str(_p); _o = str(_o)
 
-            # If instance doesn't exist is created
+            # Get subject ID
             subject = self.getInstanceID(_s)
-            if subject:
-                if subject[1] != removed:
-                    self.createInstance(_s, None, removed)
-                subject = subject[0]
-            else:
-                if removed == True:
-                    self.logger.warning('Removing an instance never existed!')
-                subject = self.createInstance(_s, None, removed)
             
-            # Object is URI
+            # If instance exists
+            if subject: subject = subject[0]
+            
+            # If subj doesn't exist create it
+            else: subject = self.createInstance(_s, None, False)
+            
+            
+            # If Object is URI
             if _t:
+                # Get its ID
                 objekt = self.getInstanceID(_o)
-                if objekt:
-                    if objekt[1] != removed:
-                        self.createInstance(_o, None, removed)
-                    objekt = objekt[0]
-                else:
-                    if removed == True: 
-                        self.logger.warning('Removing an instance never existed!')
-                    objekt = self.createInstance(_s, None, removed)
+                if objekt: objekt = objekt[0]
+                
+                else: objekt = self.createInstance(_o, None, False)
             
             else:
-                objekt = '"'+str(objekt)+'"'
+                objekt = '"'+str(_o)+'"'
             
             # Fetch property table name (a random string) from cache
             property_table_name = self.getPropertyTableName(_p)
@@ -524,11 +526,8 @@ JOIN `MRGlLBdFTyMQDb3hdNaVhTc9FKVYv2XG` AS hk ON r.ID = hk.RecordID
         """Get the ID of the instance as stored in the DB table 
         """
         
-        # Accepts URIs with angle parenthesis <uri://here>
-        if with_angular:
-            uri = self._get_uri(instance_uri)
-            if not uri: return '"'+instance_uri+'"'
-            instance_uri = uri
+        # Accepts URIs with or without angle parenthesis <uri://here>
+        instance_uri = self._get_uri(instance_uri) or instance_uri
         
         # May use 'if instance_uri in self.instances' and then return
         # it but you must search twice!
@@ -547,9 +546,10 @@ JOIN `MRGlLBdFTyMQDb3hdNaVhTc9FKVYv2XG` AS hk ON r.ID = hk.RecordID
             cursor.execute(sql)
             
             row = cursor.fetchone()
+            self.logger.sql(row)
             if row and len(row) > 0:
                 self.instances[row[1]] = {'id': row[0], 'removed': row[2]}
-                return row[1], row[2]
+                return row[0], row[2]
         
         except MySQLdb.Error, e:
             # If the property doesn't exist result is None, no one raise
@@ -557,9 +557,11 @@ JOIN `MRGlLBdFTyMQDb3hdNaVhTc9FKVYv2XG` AS hk ON r.ID = hk.RecordID
             self.logger.debug(e)
             return False
             
-        finally: cursor.close()
+        finally:
+            if cursor: cursor.close()
             
         self.logger.debug('Instance with URI "%s" doesn\'t exist', instance_uri)
+        self.logger.sql(sql)
         return False
         
 
@@ -577,7 +579,9 @@ JOIN `MRGlLBdFTyMQDb3hdNaVhTc9FKVYv2XG` AS hk ON r.ID = hk.RecordID
         return -- (list) [table, property_type] or False on failure
         """
         
-        if with_angular: property = self._get_uri(property)
+        #if with_angular: property = self._get_uri(property)
+        property = self._get_uri(property) or property
+        
         
         # Get from cache
         try:

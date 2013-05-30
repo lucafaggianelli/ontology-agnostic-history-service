@@ -40,11 +40,14 @@ class Tachometer(Thread):
             Triple( URI(ns+'Person_1'), 
                     URI(ns+'HasCar'), 
                     URI(ns+'Car_1') )]
-        self.m3.load_rdf_update(insert, remove)
+        #self.m3.load_rdf_update(insert, remove)
         print 'Owners info inserted'
         
         # Car's tires
         remove = [
+            Triple(URI(ns+'Person_1'),
+                   URI(ns+'HasCar'),
+                   None),
             Triple( URI(ns+'Car_1'), 
                     URI(ns+'HasTire'), 
                     None ),
@@ -52,6 +55,9 @@ class Tachometer(Thread):
                     URI(ns+'HasTireTread'), 
                     None )]
         insert = [
+            Triple( URI(ns+'Person_1'), 
+                    URI(ns+'HasCar'), 
+                    URI(ns+'Car_1') ),
             Triple( URI(ns+'Car_1'), 
                     URI(ns+'HasTire'), 
                     URI(ns+'Pirelli_4') ),

@@ -1,6 +1,7 @@
 from smart_m3.RDFTransactionList import *
 from Utility.Ontology import *
 from smart_m3.m3_kp import *
+from smart_m3.m3_kp_api import *
 
 import xml.etree.ElementTree as ET
 
@@ -9,15 +10,21 @@ import string
 import random
 import time
 import getopt
+import re
 
 import logging
 from ColoredFormatter import *
+
+from HistoryDecanter import HistoryDecanter
+#from HistoryHandlers import *
 
 from DatabaseConnector import DatabaseWriter
 #from OntologyAnalyzer import *
 
 import fyzz
 
+# REGEX
+matchAngleBrackets = re.compile(r"<(.*)>")
 
 def main(argv):
     
@@ -55,59 +62,74 @@ class HistoryService():
     
     def __init__(self):
         
+        # Init DB access
+        database = 'history'
+        global DB
+        DB = DatabaseWriter.DatabaseWriter('localhost',
+                                           'root',
+                                           'luca123',
+                                           database,
+                                           False)
+        
+        # Init Smart M3 API
+        global M3
+        M3 = m3_kp_api()
+        
+        
+        # Decanter
+        global Decanter
+        Decanter = HistoryDecanter()
+        
+        
+        
         # Subscribe to history requests
-        self.historyRequestSubscription = theNode.CreateSubscribeTransaction(
-                                                            theSmartSpace)
-        result = self.historyRequestSubscription.subscribe_rdf([
+        self.historyRequestSubscription = M3.load_subscribe_RDF([
             Triple( URI(HISTORY),
                     URI(HAS_HISTORY_INPUT), 
                     None) ],
             HistoryRequestHandler() )
         
         logger.info('Existing requests:')
-        logger.info(result)
+        logger.info(M3.result_RDF_first_sub)
         
         # Simulate a notification for the request already present in the SIB
-        if len(result):
-            HistoryRequestHandler().handle(result, [])
+        if len(M3.result_RDF_first_sub):
+            HistoryRequestHandler().handle(M3.result_RDF_first_sub, [])
         else:
             logger.info('No History requests')
-        
+
         
         # Subscribe to read request
-        self.historyReadSubscription = theNode.CreateSubscribeTransaction(
-                                                            theSmartSpace)
-        result = self.historyReadSubscription.subscribe_rdf([
+        self.historyReadSubscription = M3.load_subscribe_RDF([
             Triple(
                 URI(HISTORY),
                 URI(HAS_HISTORY_READ),
                 None ) ],
             HistoryReadRequestHandler())
         
-        if len(result):
-            HistoryReadRequestHandler().handle(result, [])
+        if len(M3.result_RDF_first_sub):
+            HistoryReadRequestHandler().handle(M3.result_RDF_first_sub, [])
         else:
             logger.info('No read requests')
-        
-        
+
+
     def quit(self):
         
         # Close subscription to History Requests
-        theNode.CloseSubscribeTransaction(self.historyRequestSubscription)
-        theNode.CloseSubscribeTransaction(self.historyReadSubscription)
+        self.historyRequestSubscription.close()
+        self.historyReadSubscription.close()
         
         # Close subscriptions to SPARQL queries of the history requests
         global sparqlSubscriptions
         for sub in sparqlSubscriptions:
-            theNode.CloseSubscribeTransaction(sub)
-            
-        theNode.leave(theSmartSpace)
-        
+            sub.close()
+
+        M3.leave()
 
 
 class HistoryRequestHandler():
     """Req handler
-    """
+    """    
     
     def handle(self,added, removed):
         """M3 handler
@@ -119,25 +141,28 @@ class HistoryRequestHandler():
             logger.info(index)
             
             # Query to obtain the sparql query to subscribe to
-            query = theNode.CreateQueryTransaction(theSmartSpace)
+            #query = theNode.CreateQueryTransaction(theSmartSpace)
             q = "select ?sparql where {<%s> <%s> ?sparql .}" %(index[2], HAS_SPARQL)
-            result = query.sparql_query(q)
+            M3.load_query_sparql(q)
             
-            if len(result):
-                sparqlToSubscribeTo = str(result[0][0][2])
+            if len(M3.result_sparql_query):
+                sparqlToSubscribeTo = str(M3.result_sparql_query[0][0][2])
                 
                 # If SPARQL is not good remove the request and continue the loop
                 parsed = fyzz.parse(sparqlToSubscribeTo)
     
                 # Subscribe to SPARQL query issued by the history request
-                subscription = theNode.CreateSubscribeTransaction(theSmartSpace)
-                results = subscription.subscribe_sparql(sparqlToSubscribeTo, 
-                                              HistorySparqlHandler(parsed.where))
+                #subscription = theNode.CreateSubscribeTransaction(theSmartSpace)
+                subscription = M3.load_subscribe_sparql(sparqlToSubscribeTo,
+                                            HistorySparqlHandler(parsed.where))
+                #results = subscription.subscribe_sparql(sparqlToSubscribeTo, 
+                #                              HistorySparqlHandler(parsed.where))
                 logger.info("Subscribed to: %s" % sparqlToSubscribeTo)
                 
                 # Serve the history request with existing data, otherwise when 
                 # the read request gets an error (table not found)
-                HistorySparqlHandler(parsed.where).handle(results, [])
+                HistorySparqlHandler(parsed.where).handle(M3.result_sparql_first_sub,
+                                                          [])
                 
                 # Track all the subscriptions in an array
                 global sparqlSubscriptions
@@ -148,40 +173,71 @@ class HistoryRequestHandler():
         for index in removed:
             logger.info("Removed record:")
             logger.info(index)
-            
-    
 
 
 class HistorySparqlHandler():
-    """Sparql handler
+    """Handler for SPARQL notification of history request
     """
     
     def __init__(self, templates):
         
-        # TODO: Not nice, create a global DB object and use it!
-        database = 'history'
-        self.db = DatabaseWriter.DatabaseWriter('localhost',
-                                                'root',
-                                                'luca123',
-                                                database,
-                                                False)
+        global DB
+        self.db = DB
+        
         self.templates = templates
-
     
     def handle(self, added, removed):
         """
         """
         
-        if added and added != []:            
-            to_add = self.build_triples_to_write(added)
-            self.db.addTriples(to_add)
-        
+        # The order here is of PARAMOUNT importance! You need to remove prior
+        # of inserting new triples!!!!
         if removed and removed != []:
-            to_remove = self.build_triples_to_write(removed)
+            to_remove = self.build_triples_to_remove(removed)
+            logger.debug(to_remove)
             self.db.removeTriples(to_remove)
-
         
-    def build_triples_to_write(self, updated):
+        if added and added != []:            
+            to_add = self.build_triples_to_add(added)
+            logger.debug(to_add)
+            self.db.addTriples(to_add)
+    
+
+    def build_triples_to_remove(self, removed_vars):
+        
+        vars = self.prettify_sparql_result(removed_vars)
+        
+        # Sparql query translated in RDF query, where all triples are in OR
+        # chain
+        rdf_query = self.sparql2rdf(self.templates, vars)
+        
+        # RDF query to understand what has been really deleted
+        qTransaction = theNode.CreateQueryTransaction(theSmartSpace)            
+        result = qTransaction.rdf_query(rdf_query)
+        theNode.CloseQueryTransaction(qTransaction)
+        
+        for triple in result:
+            # This should wrap the for: exception here is a bug!
+            try:
+                i = rdf_query.index(triple)
+                rdf_query.pop(i)
+                
+            except ValueError:
+                logger.warning('Triple "%s" in result but not in query, strange!'%
+                               str(triple))
+        
+        triples_to_remove = []
+        for t in rdf_query:
+            _uri = t[2].__class__.__name__ == 'URI'
+            t = map(str, t)
+            t.append(_uri)
+            
+            triples_to_remove.append(t)
+        
+        return triples_to_remove
+        
+        
+    def build_triples_to_add(self, updated):
         
         for new_vars in updated:
             # new_vars =
@@ -191,6 +247,7 @@ class HistorySparqlHandler():
             #
             # self.templates =
             #[(SparqlVar(car),('','a'),'<http://arces.it/Car>')]
+            # literals are: SparqlLiteral('87')
 
             triples_to_write = [] # Init triple to write
 
@@ -203,7 +260,7 @@ class HistorySparqlHandler():
 
             for template in self.templates:
                 triple_to_write = None
-                
+                    
                 for i, elem in enumerate(template):                    
                     if ((elem.__class__.__name__ == 'SparqlVar') and 
                         (elem.name in vars)):
@@ -232,6 +289,54 @@ class HistorySparqlHandler():
             
             return triples_to_write
     
+    
+    def sparql2rdf(self, triples, vars):
+        """Convert a SPARQL query in a RDF query, where the triples are chained
+        with the OR operator instead of the AND (dot) SPARQL operator
+        
+        triples -- (list)
+        vars    -- (dict)
+        """
+        
+        rdf = []
+        for triple in triples:
+            if not len(triple) == 3:
+                logger.warning('Found a triple of length: %d. Can\'t convert!'%
+                               len(triple))
+                return False
+            
+            _t = []
+            for element in triple:
+                if element.__class__.__name__ == 'SparqlVar':
+                    _v = vars[element.name]
+                    _e = URI(_getURI(_v['name'])) if _v['uri'] else Literal(_v['name'])
+                
+                elif element.__class__.__name__ == 'SparqlLiteral':
+                    _e = Literal(element.value)
+                
+                elif element.__class__ == tuple:
+                    _e = URI(':'.join(element))
+                
+                elif element.__class__ == str:
+                    _e = URI( _getURI(element) )
+                
+                _t.append(_e)
+            rdf.append(_t)
+        
+        return rdf
+            
+            
+    def prettify_sparql_result(self, sparql_result):
+        
+        vars = {}
+        for changed_vars in sparql_result:
+            for changed_var in changed_vars:
+                vars[changed_var[0]] = {'uri': (changed_var[1]=='uri')}
+                vars[changed_var[0]]['name'] = (changed_var[2]  if changed_var[1] == 'literal'
+                                                                else '<'+changed_var[2]+'>')
+        
+        return vars
+
 
 class HistoryReadRequestHandler():
     """Read handler
@@ -240,18 +345,14 @@ class HistoryReadRequestHandler():
     """
 
     def __init__(self):
-
-        database = 'history'
-        self.db = DatabaseWriter.DatabaseWriter('localhost',
-                                                'root',
-                                                'luca123',
-                                                database,
-                                                False)
+        
+        global DB
+        self.db = DB
         
         self.test = """
             SELECT ?person ?car ?km ?tire ?tireTread WHERE {
                 ?person <http://rdf.tesladocet.com/ns/person-car.owl#HasCar>   ?car .
-                ?car    <http://rdf.tesladocet.com/ns/person-car.owl#HasKm> ?km .
+                ?car    <http://rdf.tesladocet.com/ns/person-car.owl#HasKm> '7' .
                 ?car    <http://rdf.tesladocet.com/ns/person-car.owl#HasTire> ?tire .
                 ?tire   <http://rdf.tesladocet.com/ns/person-car.owl#HasTireTread> ?tireTread
             }"""
@@ -276,7 +377,6 @@ class HistoryReadRequestHandler():
     def readHistoryData(self, sparql, read_request_uri):
         """Make a SPARQL query in a SQL DB
         """
-        # TODO: Clear the request when you're done
         
         # Parse SPARQL query
         # parsed.selected => selected vars
@@ -482,7 +582,7 @@ class HistoryReadRequestHandler():
         
         # row is something like:
         #
-        # (2L, datetime.datetime(2013, 4, 17, 15, 7, 13), 
+        # (2L, datetime.datetime(2013, 4, 17, 15, 7, 13), removed
         #  None, None, 2L, 1L, None, None, None, None)
         #
         # (RecordID, date, your_data, lot of NULL/None)
@@ -506,6 +606,17 @@ class HistoryReadRequestHandler():
                     
                     sparql_response_result_binding_type.text = str(col)
                 
+                # Removed
+                elif i == 2:
+                    sparql_response_result_binding = ET.SubElement(
+                        sparql_response_result, 'binding',
+                        {'name': 'HistoryServiceRemoved'})
+                    
+                    sparql_response_result_binding_type = ET.SubElement(
+                        sparql_response_result_binding, 'literal')
+                    
+                    sparql_response_result_binding_type.text = str(col)
+                
                 # Variables
                 else:
                     if col == None: continue
@@ -513,11 +624,11 @@ class HistoryReadRequestHandler():
                     sparql_response_result_binding = ET.SubElement(
                                     sparql_response_result,
                                     'binding',
-                                    { 'name': selected_vars_sql[i-2]['name'] } )
+                                    { 'name': selected_vars_sql[i-3]['name'] } )
                     
-                    if selected_vars_sql[i-2]['uri']: 
+                    if selected_vars_sql[i-3]['uri']: 
                         type = 'uri'
-                        var_value = str(self.db.getInstanceURI(int(col)))
+                        var_value = str( self.db.getInstanceURI(int(col)) )
                     else:
                         type = 'literal'
                         var_value = str(col)
@@ -539,8 +650,17 @@ class HistoryReadRequestHandler():
                     Literal(result) ) ])
         theNode.CloseQueryTransaction(insert)
 
+
 ####################################################################
 
+def _getURI(string):
+    """ Extracts content between angle brackets <urihere>
+    """
+    m = matchAngleBrackets.match(string)
+    return (False if (m == None) else m.group(1))
+
+
+####################################################################
 logging.setLoggerClass(ColoredLogger)
 
 global logger

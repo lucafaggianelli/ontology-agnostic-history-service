@@ -1,0 +1,9 @@
+HistoryService
+==============
+1 [ ] (!) HistorySparqlHandler, sometimes loses data maybe too fast notifications, launch handlers as threads
+2 [x] (!) Use only one DBWriter instance to avoid concurrency
+
+Decanter
+========
+4 [ ] ( ) Filter duplicated data here
+3 [?] ( ) Implement decanter functionality with time buffer
