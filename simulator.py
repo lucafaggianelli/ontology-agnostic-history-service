@@ -1,6 +1,9 @@
 from smart_m3.RDFTransactionList import *
 from Utility.Ontology import *
 from smart_m3.m3_kp_api import *
+
+from HistoryClient import *
+
 import sys
 from threading import Thread
 import time
@@ -8,17 +11,43 @@ import time
 ns = 'http://rdf.tesladocet.com/ns/person-car.owl#'
 
 def main():
+    
+    client = HistoryClient()
+    
+    print '-- Car history simulator --'
+    
+    # Make a history request for data we're gonna insert
+    sparql = """
+        SELECT ?person ?car ?km ?tire ?tireTread WHERE {
+            ?person <http://rdf.tesladocet.com/ns/person-car.owl#HasCar>   ?car .
+            ?car    <http://rdf.tesladocet.com/ns/person-car.owl#HasKm> ?km .
+            ?car    <http://rdf.tesladocet.com/ns/person-car.owl#HasTire> ?tire .
+            ?tire   <http://rdf.tesladocet.com/ns/person-car.owl#HasTireTread> ?tireTread
+        }"""
+    req_id = client.addHistoryRequest(sparql)
+    print req_id
+    
+    # Start the simulator
     tachometer = Tachometer()
     tachometer.start()
     
+    # Keep it running untill Ctrl-c
     global carEngineOn
     try:
         while True:
             time.sleep(10)
     except KeyboardInterrupt:
-        print 'Shutting off the car...'
+        print 'Shutting off the engine...'
         carEngineOn = False
-        sys.exit()
+        
+    # Retrieve back historical data
+    client.readHistoryRequestData(req_id, ReadResponseHandler())
+    
+    # Close all the subscriptions of the client, otherwise it hangs
+    client.quit()
+    
+    sys.exit()
+    
     
 class Tachometer(Thread):
     def __init__(self):
@@ -31,19 +60,7 @@ class Tachometer(Thread):
         
     def run(self):
         
-        # Person's car
-        remove = [
-            Triple(URI(ns+'Person_1'),
-                   URI(ns+'HasCar'),
-                   None)]
-        insert = [
-            Triple( URI(ns+'Person_1'), 
-                    URI(ns+'HasCar'), 
-                    URI(ns+'Car_1') )]
-        #self.m3.load_rdf_update(insert, remove)
-        print 'Owners info inserted'
-        
-        # Car's tires
+        # Car info
         remove = [
             Triple(URI(ns+'Person_1'),
                    URI(ns+'HasCar'),
@@ -65,7 +82,8 @@ class Tachometer(Thread):
                     URI(ns+'HasTireTread'), 
                     URI(ns+'TireTread_Wet') )]
         self.m3.load_rdf_update(insert, remove)
-        print 'Tire info inserted'
+        print 'Car info:'
+        print insert
 
         global carEngineOn
         while(carEngineOn):
@@ -76,12 +94,28 @@ class Tachometer(Thread):
             
             self.m3.load_rdf_update(insert, remove)
             
-            print "Car run for %ikm" % self.km
+            print "Car runs for %ikm" % self.km
             
             time.sleep(3)
             
-        print 'Now is off!'
+        print 'Engine is off!'
         
+        
+class ReadResponseHandler():
+    
+    def handle(self, added, removed):
+        # removed should be []
+        # added should contain only 1 result with 1 variable
+        # [ [['res', 'literal', 'your_xml_response']] ]
+        
+        response = parse_sparql(added[0][0][2])
+        print response
+        
+        for i,result in enumerate(response):
+            print '\n'
+            for var in result:
+                print str(i)+') '+var[0]+' = '+var[2]+'; '+var[1]
+                
 
 
 if __name__ == "__main__":

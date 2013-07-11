@@ -8,6 +8,8 @@ from smart_m3.m3_kp_api import *
 import uuid
 import sys
 
+global M3
+M3 = m3_kp_api(False, 'localhost')#'192.168.1.104')
 
 class HistoryClient():
     """This class is a Client Interface for the History Service. It should
@@ -18,7 +20,8 @@ class HistoryClient():
     
     def __init__(self):
         
-        self.m3 = m3_kp_api()
+        global M3
+        self.m3 = M3
         self.readResponseSubscriptions = []
         
         
@@ -29,7 +32,8 @@ class HistoryClient():
         **Arguments**
             * sparql (str) - SPARQL query
             * handler (Class) - Handler of the response. None if dont want to
-            subscribe, can fetch the response in a second moment.
+            subscribe, can fetch the response in a second moment, but please
+            clear the read request calling .clearReadRequest(req_id).
             
         **Return**
             * (str) - Read request instance URI.
@@ -46,9 +50,12 @@ class HistoryClient():
             # Store the subscription, to unsubscribe later...
             # TODO: Clear the request from the SIB and unsubscribe, this should be
             # done in the handler: build a superclass that does the trick!
-            self.readResponseSubscriptions.append(
-                self.m3.load_subscribe_sparql(response_sub_query, handler) )
-        
+            sub = self.m3.load_subscribe_sparql(response_sub_query, 
+                                          HistoryReadResponse(handler,
+                                                              history_read_instance))
+            self.readResponseSubscriptions.append(sub)
+            
+            
         insert = [
             Triple(
                 URI(history_read_instance),
@@ -85,6 +92,17 @@ class HistoryClient():
         sparql = self.showHistotyRequestDetails(request_uri)
         return self.readHistoryData(sparql, handler)
     
+    
+    def clearHistoryReadRequest(self, req_id):
+        """Clear an history read request from the history service. To be
+        called only if you don't provide a handler to the history read request
+        """
+        
+        self.m3.load_rdf_remove([Triple(
+                                    URI(self.req_id),
+                                    URI(HAS_HISTORY_READ_RESPONSE),
+                                    None)])
+        
     
     def addHistoryRequest(self, sparql):
         """Issues a History Request
@@ -238,7 +256,31 @@ class HistoryClient():
         
         for sub in self.readResponseSubscriptions:
             self.m3.load_unsubscribe(sub)
-                    
+
+
+class HistoryReadResponse():
+    """Auxiliary class used to automatically remove the read request
+    """
+    
+    
+    def __init__(self, handler, req_id):
+        self.handler = handler
+        self.req_id = req_id
+    
+    def handle(self, added, removed):
+        
+        global M3
+        
+        # Remove History read request automatically
+        M3.load_rdf_remove([Triple(
+                                URI(self.req_id),
+                                URI(HAS_HISTORY_READ_RESPONSE),
+                                None)])
+        
+        # Call the handler
+        self.handler.handle(added,removed)
+        
+              
 
 def main():
     

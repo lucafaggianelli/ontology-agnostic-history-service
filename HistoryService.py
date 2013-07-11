@@ -73,12 +73,13 @@ class HistoryService():
         
         # Init Smart M3 API
         global M3
-        M3 = m3_kp_api()
+        M3 = m3_kp_api(False, 'localhost')#'192.168.1.104')
         
         
         # Decanter
         global Decanter
-        Decanter = HistoryDecanter()
+        Decanter = HistoryDecanter(DB)
+        Decanter.start()
         
         
         
@@ -123,6 +124,9 @@ class HistoryService():
         global sparqlSubscriptions
         for sub in sparqlSubscriptions:
             sub.close()
+
+        # Close the decanter
+        Decanter.kill()
 
         M3.leave()
 
@@ -184,6 +188,10 @@ class HistorySparqlHandler():
         global DB
         self.db = DB
         
+        # Should write to decanter and never directly to DB
+        global Decanter
+        self.decanter = Decanter
+        
         self.templates = templates
     
     def handle(self, added, removed):
@@ -195,12 +203,14 @@ class HistorySparqlHandler():
         if removed and removed != []:
             to_remove = self.build_triples_to_remove(removed)
             logger.debug(to_remove)
-            self.db.removeTriples(to_remove)
+            #self.db.removeTriples(to_remove)
+            self.decanter.addTriples(to_remove)
         
         if added and added != []:            
             to_add = self.build_triples_to_add(added)
             logger.debug(to_add)
-            self.db.addTriples(to_add)
+            #self.db.addTriples(to_add)
+            self.decanter.addTriples(to_add)
     
 
     def build_triples_to_remove(self, removed_vars):
@@ -230,7 +240,8 @@ class HistorySparqlHandler():
         for t in rdf_query:
             _uri = t[2].__class__.__name__ == 'URI'
             t = map(str, t)
-            t.append(_uri)
+            #t.append(_uri)
+            t.extend([_uri, True])
             
             triples_to_remove.append(t)
         
@@ -278,7 +289,9 @@ class HistorySparqlHandler():
                 if triple_to_write:
                     #type = template[2].__class__.__name__ == 'SparqlVar'
                     
-                    #triple_to_write.append(type)
+                    # The triple must be added, not removed
+                    triple_to_write.append(False)
+                    
                     triples_to_write.append(triple_to_write)
                                     
             # Prefixed syntax for uri is represented as ('prefix','id')
@@ -352,7 +365,7 @@ class HistoryReadRequestHandler():
         self.test = """
             SELECT ?person ?car ?km ?tire ?tireTread WHERE {
                 ?person <http://rdf.tesladocet.com/ns/person-car.owl#HasCar>   ?car .
-                ?car    <http://rdf.tesladocet.com/ns/person-car.owl#HasKm> '7' .
+                ?car    <http://rdf.tesladocet.com/ns/person-car.owl#HasKm> ?km .
                 ?car    <http://rdf.tesladocet.com/ns/person-car.owl#HasTire> ?tire .
                 ?tire   <http://rdf.tesladocet.com/ns/person-car.owl#HasTireTread> ?tireTread
             }"""
@@ -398,7 +411,7 @@ class HistoryReadRequestHandler():
         for var in parsed.selected:
             selected_vars_sql.append({'name': var.name, 'uri': None})
         
-        # Columns name used for joining to property table
+        # used for joining to property table, use array to save some IF
         join_on = ('SubjectID', None, 'Object')
         
         # Creation of the adjacencies list

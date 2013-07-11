@@ -1,9 +1,17 @@
 HistoryService
 ==============
-1 [ ] (!) HistorySparqlHandler, sometimes loses data maybe too fast notifications, launch handlers as threads
+6 [?] (H) Clear read request after it is consumed
+5 [ ] (H) Allow polling, not just subscription
+1 [x] (!) HistorySparqlHandler, sometimes loses data maybe too fast notifications, launch handlers as threads
 2 [x] (!) Use only one DBWriter instance to avoid concurrency
 
 Decanter
 ========
-4 [ ] ( ) Filter duplicated data here
-3 [?] ( ) Implement decanter functionality with time buffer
+7 [ ] (L) Implement security buffer
+4 [?] ( ) Filter duplicated data here
+3 [x] ( ) Implement decanter functionality with time buffer
+
+HistoryClient
+=============
+9 [ ] (H) Reconstruct graph from result and query
+8 [ ] (H) Prettify output for demo

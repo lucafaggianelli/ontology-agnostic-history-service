@@ -303,10 +303,14 @@ class DatabaseWriter:
 
         try:
             #cursor = self.connection.cursor()            
-            cols = ( '`SubjectID` int(11) NOT NULL',
-                     '`Object` int(11) NOT NULL',
-                     '`RecordID` int(11) NOT NULL',
-                     '`Removed` boolean NOT NULL' )
+            cols = ['`SubjectID` int(11) NOT NULL']
+            if object_property: 
+                cols.append('`Object` int(11) NOT NULL')
+            else:
+                cols.append('`Object` varchar(255) NOT NULL')
+                     
+            cols.extend(['`RecordID` int(11) NOT NULL',
+                     '`Removed` boolean NOT NULL'])
             self.db.createTable(random_table_name, cols, False)
         
         except DBAdapterError, e:
@@ -326,32 +330,36 @@ class DatabaseWriter:
 
 
     def removeTriples(self,triples):
+        self.logger.warning('Deprecated, use .writeTriples()')
         self._writeTriples(triples, removed = True)
 
     def addTriples(self, triples):
+        self.logger.warning('Deprecated, use .writeTriples()')
         self._writeTriples(triples, removed = False)
     
     
-    def _writeTriples(self, triples, removed):
+    def _writeTriples(self, triples):
+        self.logger.warning('Deprecated, use .writeTriples()')
+        self.writeTriples(triples)
+
+    def writeTriples(self, triples):
         """Execute a write action on the DB. Dont call this function directly,
         use the higher level specific functions
         
-        triples -- (list) List of triples each with 4 elements (subj, pred, obj,
-            obj_type)
-        removed -- (bool) True if the triple must flagged as removed, False
-            otherwise    
+        triples -- (list) List of triples each with 5 elements (subj, pred, obj,
+            obj_type, removed)
         --
         return -- (int) The number of NOT written triples, 0 means fine!
         """
         
-        if removed == None: return False
+        #if removed == None: return False
         
         # Triple not written due to errors
         not_written = 0
         
         for triple in triples:
             # Unpack triple, _t is True for uri or False for literal
-            _s, _p, _o, _t = triple
+            _s, _p, _o, _t, removed = triple
             _s = str(_s); _p = str(_p); _o = str(_o)
 
             # Get subject ID
