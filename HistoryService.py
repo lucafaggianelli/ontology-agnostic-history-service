@@ -133,7 +133,7 @@ class HistoryService():
 
 class HistoryRequestHandler():
     """Req handler
-    """    
+    """
     
     def handle(self,added, removed):
         """M3 handler
@@ -570,12 +570,13 @@ class HistoryReadRequestHandler():
                         elif _s == None:
                             nodes[_o] = (node, _p, None)
                         
-            unions.append('SELECT r.ID, unix_timestamp(r.Timestamp), ' +
+            unions.append('SELECT r.ID AS rec, unix_timestamp(r.Timestamp), ' +
                           select_clause_sql.pop(0) +
                           ' FROM `Records` AS r' +
-                          join)
+                          join )
             
         sql_query = ' UNION '.join(unions)
+        sql_query+= ' ORDER BY rec ASC'
         cur = self.db.connection.cursor()
         cur.execute(sql_query)
         
@@ -641,7 +642,7 @@ class HistoryReadRequestHandler():
                     
                     if selected_vars_sql[i-3]['uri']: 
                         type = 'uri'
-                        var_value = str( self.db.getInstanceURI(int(col)) )
+                        var_value = str( self.db.getInstanceURI(int(col))[0] )
                     else:
                         type = 'literal'
                         var_value = str(col)

@@ -1,10 +1,9 @@
 #!/usr/bin/python
-import sys
+import sys, time
 from HistoryClient import *
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 from PyQt4.Qt import *
-
 
 class MainWindow(QMainWindow):
     
@@ -173,13 +172,18 @@ class HistoryReadResponseHandler():
         # added should contain only 1 result with 1 variable
         # [ [['res', 'literal', 'your_xml_response']] ]
         
-        response = parse_sparql(added[0][0][2])
-        print response
+        if added == []: return;
         
-        for i,result in enumerate(response):
-            print '\n'
-            for var in result:
-                print str(i)+') '+var[0]+' = '+var[2]+'; '+var[1]
+        response = parse_sparql(added[0][0][2])
+        
+        for i,res in enumerate(response):
+            _time = time.strftime("%a, %d %b %Y %H:%M:%S",
+                        time.localtime( int(res[0][2]) ) )
+            _del = '[Deleted]' if int(res[1][2]) else ''
+            
+            print _time, res[2][2].split('#')[-1], res[3][2].split('#')[-1], _del
+            #for var in result:
+            #    print str(i)+') '+var[0]+' = '+var[2]+'; '+var[1]
 
 # Set up the main window
 app = QApplication(sys.argv)
