@@ -1,0 +1,61 @@
+{% extends "layout.html" %}
+{% block body %}
+  {{ super() }}
+  <table class="index-table" align="center">
+    <tr width="100%">
+    <td colspan="2" style="border:none;text-align:center;">
+      <p class="biglink"><a class="biglink"
+        href="http://git.tesladocet.com/export/HistoryService-v0.1pre-alpha.zip">Download latest</a><br/>
+         <span class="linkdescr">or <a href="{{ pathto("download") }}">previous versions</a></span></p>
+    </td>
+    </tr>
+
+    <tr>
+    <td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("get-started") }}">Get started</a><br/>
+         <span class="linkdescr">start here</span></p>
+
+      <p class="biglink"><a class="biglink" href="{{ pathto("behind-scene") }}">Behind the Scenes</a><br/>
+         <span class="linkdescr">how does it work?</span></p>
+
+    </td><td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("whatsnew/" + version) }}">What's new in {{ version }}?</a><br/>
+         <span class="linkdescr">or <a href="{{ pathto("whatsnew") }}">all "What's new" documents</a></span></p>
+
+      <p class="biglink"><a class="biglink" href="{{ pathto("reference") }}">Library Reference</a><br/>
+         <span class="linkdescr">keep this under your pillow</span></p>
+
+    </td>
+    </tr>
+  </table>
+<!--
+  <p><strong>Indices and tables:</strong></p>
+  <table class="contentstable" align="center"><tr>
+    <td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("py-modindex") }}">Global Module Index</a><br/>
+         <span class="linkdescr">quick access to all modules</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("genindex") }}">General Index</a><br/>
+         <span class="linkdescr">all functions, classes, terms</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("glossary") }}">Glossary</a><br/>
+         <span class="linkdescr">the most important terms explained</span></p>
+    </td><td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("search") }}">Search page</a><br/>
+         <span class="linkdescr">search this documentation</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("contents") }}">Complete Table of Contents</a><br/>
+         <span class="linkdescr">lists all sections and subsections</span></p>
+    </td></tr>
+  </table>
+-->
+<!--
+  <p><strong>Meta information:</strong></p>
+  <table class="contentstable" align="center"><tr>
+    <td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("bugs") }}">Reporting bugs</a></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("about") }}">About the documentation</a></p>
+    </td><td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("license") }}">History and License of Python</a></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("copyright") }}">Copyright</a></p>
+    </td></tr>
+  </table>
+-->
+{% endblock %}

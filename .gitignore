@@ -1,5 +1,5 @@
-# Doc
-/doc
+# Ignore only built doc, not sources
+/doc/_build
 
 # SIB files
 X-po2s.db

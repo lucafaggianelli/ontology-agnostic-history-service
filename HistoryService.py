@@ -1,6 +1,6 @@
 from smart_m3.RDFTransactionList import *
 from Utility.Ontology import *
-from smart_m3.m3_kp import *
+#from smart_m3.m3_kp import * # Now using M3 API
 from smart_m3.m3_kp_api import *
 
 import xml.etree.ElementTree as ET
@@ -62,18 +62,21 @@ class HistoryService():
     
     def __init__(self):
         
+        global config
+        
         # Init DB access
-        database = 'history'
         global DB
-        DB = DatabaseWriter.DatabaseWriter('localhost',
-                                           'root',
-                                           'luca123',
-                                           database,
-                                           False)
+        DB = DatabaseWriter.DatabaseWriter(config['db_address'],
+                                           config['db_user'],
+                                           config['db_password'],
+                                           config['db_name'],
+                                           config['rebuild_db'],
+                                           config['db_adapter'],
+                                           config['log_level'])
         
         # Init Smart M3 API
         global M3
-        M3 = m3_kp_api(False, 'localhost')#'192.168.1.104')
+        M3 = m3_kp_api(False, config['sib_address'], config['sib_port'])
         
         
         # Decanter
@@ -145,7 +148,6 @@ class HistoryRequestHandler():
             logger.info(index)
             
             # Query to obtain the sparql query to subscribe to
-            #query = theNode.CreateQueryTransaction(theSmartSpace)
             q = "select ?sparql where {<%s> <%s> ?sparql .}" %(index[2], HAS_SPARQL)
             M3.load_query_sparql(q)
             
@@ -156,11 +158,9 @@ class HistoryRequestHandler():
                 parsed = fyzz.parse(sparqlToSubscribeTo)
     
                 # Subscribe to SPARQL query issued by the history request
-                #subscription = theNode.CreateSubscribeTransaction(theSmartSpace)
                 subscription = M3.load_subscribe_sparql(sparqlToSubscribeTo,
                                             HistorySparqlHandler(parsed.where))
-                #results = subscription.subscribe_sparql(sparqlToSubscribeTo, 
-                #                              HistorySparqlHandler(parsed.where))
+                
                 logger.info("Subscribed to: %s" % sparqlToSubscribeTo)
                 
                 # Serve the history request with existing data, otherwise when 
@@ -222,11 +222,9 @@ class HistorySparqlHandler():
         rdf_query = self.sparql2rdf(self.templates, vars)
         
         # RDF query to understand what has been really deleted
-        qTransaction = theNode.CreateQueryTransaction(theSmartSpace)            
-        result = qTransaction.rdf_query(rdf_query)
-        theNode.CloseQueryTransaction(qTransaction)
+        M3.load_query_rdf(rdf_query)
         
-        for triple in result:
+        for triple in M3.result_rdf_query:
             # This should wrap the for: exception here is a bug!
             try:
                 i = rdf_query.index(triple)
@@ -375,12 +373,11 @@ class HistoryReadRequestHandler():
         """
         for read_request in added:
             
-            read = theNode.CreateQueryTransaction(theSmartSpace)
-            result = read.rdf_query([
+            M3.load_query_rdf([
                 Triple( URI(read_request[2]),
                         URI(HAS_SPARQL),
                         None ) ])
-            theNode.CloseQueryTransaction(read)
+            result = M3.result_rdf_query
             
             logger.debug(result)
             
@@ -657,12 +654,10 @@ class HistoryReadRequestHandler():
         # Alert, ET.dump() is a print, use ET.tostring() to save in variable
         result = ET.tostring(sparql_response)
         
-        insert = theNode.CreateInsertTransaction(theSmartSpace)
-        insert.insert([
+        M3.load_rdf_insert([
             Triple( URI(read_request_uri),
                     URI(HAS_HISTORY_READ_RESPONSE),
                     Literal(result) ) ])
-        theNode.CloseQueryTransaction(insert)
 
 
 ####################################################################
@@ -693,17 +688,55 @@ def _usage():
     """
     
     print """
--h, --help : Show this help page
--r, --rebuild-db : Drop the history DB and reinitialize the DB and all the tables
--l, --log: Set log level. Case insensitive options: DEBUG, INFO, WARNING, 
-    ERROR, CRITICAL.
+Help for the History Service
+    -h --help : Show this help page
+    
+General config:
+
+    -l --log : Set log level. Case insensitive options: SQL, DEBUG, INFO, WARNING, ERROR, CRITICAL. Be aware that SQL debug level is extremely verbose! Default is WARNING.
+
+
+SIB config:
+
+    -s --sib : SIB IP address, default is 'localhost'
+    -p --port : SIB port, default is '10010'
+    
+        
+DB config:
+    
+    --db : Database name, default is 'history'
+    --db-address : IP address of the database, default is 'localhost'
+    --db-user : User name of the database, default is 'root'
+    --db-password : Password for the user, may be not required
+    --db-adapter : Database system name (mysql, postgresql, ...)    
+    --db-rebuild : Drop the DB and reinitialize the DB and all the tables. No argument needed.
     """
             
 def _set_commandline_options(argv):
+    
+    global config
+    config = {}
+    
+    # Default values
+    config['log_level'] = 'WARNING'
+
+    config['sib_address'] = 'localhost'
+    config['sib_port'] = 10010
+
+    config['db_name'] = 'history'
+    config['db_address'] = 'localhost'
+    config['db_user'] = 'root'
+    config['db_password'] = 'root'
+    config['db_adapter'] = 'mysql'
+    config['rebuild_db'] = False
+    
+    
     try:
         # Parse options
-        opts, args = getopt.getopt(argv, "hrl:d:", 
-            ["help", "rebuild-db", "log=", "db="])
+        opts, args = getopt.getopt(argv, "hrl:s:p:d:", 
+            ["help", "db-rebuild", "log=", 
+             'sib=', 'port=', 
+             "db=", 'db-address=', 'db-user=', 'db-password=', 'db-adapter='])
         
         # Set options
         for opt, arg in opts:
@@ -712,22 +745,42 @@ def _set_commandline_options(argv):
             if opt in ("-h", "--help"):
                 _usage()
                 sys.exit()
-                
-            # Reset DB
-            elif opt in ("-r", "--rebuild-db"):
-                rebuild_db = True
-    
+
             # Set log level
-            elif opt in ('-l', '--log'):
-                global numeric_level
-                numeric_level = getattr(logging, arg.upper(), None)
-                if not isinstance(numeric_level, int):
-                    raise ValueError('Invalid log level: %s' % arg)
-                logger.setLevel(numeric_level)
+            elif opt in ('-l', '--log'):                
+                config['log_level'] = arg.upper()
+            
+            # SIB address and port
+            elif opt in ('s', 'sib'):
+                config['sib_address'] = arg
+            
+            elif opt in ('p', 'port'):
+                config['sib_port'] = arg
             
             # DB
             elif opt in ('-d', '--db'):
-                database = arg
+                config['db_name'] = arg
+                                
+            elif opt in ('--db-address'):
+                config['db_address'] = arg
+                
+            elif opt in ('--db-user'):
+                config['db_user'] = arg
+                
+            elif opt in ('--db-password'):
+                config['db_password'] = arg
+                
+            elif opt in ('--db-adapter'):
+                config['db_adapter'] = arg
+                
+            elif opt in ("-r", "--db-rebuild"):
+                config['rebuild_db'] = True
+                
+                
+        numeric_level = getattr(logging, config['log_level'], None)
+        if not isinstance(numeric_level, int):
+            raise ValueError('Invalid log level: %s' % config['log_level'])
+        logger.setLevel(numeric_level)
         
     except getopt.GetoptError:
         _usage()
@@ -739,16 +792,16 @@ def _set_commandline_options(argv):
 if __name__ == "__main__":
     
     # Set from command line
-    SmartSpaceName = "X"
-    IPADDR = "localhost"
-    Port = 10010
+    #SmartSpaceName = "X"
+    #IPADDR = "localhost"
+    #Port = 10010
     
-    nodename=str(uuid.uuid4())
-    theNode=KP(nodename)
+    #nodename=str(uuid.uuid4())
+    #theNode=KP(nodename)
     
-    theSmartSpace=(SmartSpaceName,(TCPConnector,(IPADDR,Port)))
-    if not theNode.join(theSmartSpace):
-        sys.exit("Could not join to Smart Space")
-    print "*** Joined ("+str(nodename)+") with SmartSpace "+str(theSmartSpace)+" ***"
+    #theSmartSpace=(SmartSpaceName,(TCPConnector,(IPADDR,Port)))
+    #if not theNode.join(theSmartSpace):
+    #    sys.exit("Could not join to Smart Space")
+    #print "*** Joined ("+str(nodename)+") with SmartSpace "+str(theSmartSpace)+" ***"
         
     main(sys.argv[1:])

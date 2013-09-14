@@ -1,15 +1,12 @@
 from smart_m3.RDFTransactionList import *
 from Utility.Ontology import *
-from smart_m3.m3_kp import *
+#from smart_m3.m3_kp import *
 from smart_m3.m3_kp_api import *
 
 #from DatabaseWriter import *
 
 import uuid
 import sys
-
-global M3
-M3 = m3_kp_api(False, 'localhost')#'192.168.1.104')
 
 class HistoryClient():
     """This class is a Client Interface for the History Service. It should
@@ -18,9 +15,11 @@ class HistoryClient():
     directly.
     """
     
-    def __init__(self):
+    def __init__(self, sib_address = 'localhost', sib_port = 10010):
         
         global M3
+        M3 = m3_kp_api(False, sib_address, sib_port)
+        
         self.m3 = M3
         self.readResponseSubscriptions = []
         
@@ -280,11 +279,16 @@ class HistoryReadResponse():
         # Call the handler
         self.handler.handle(added,removed)
         
-              
 
 def main():
     
-    client = HistoryClient()
+    address = raw_input('SIB address [default=localhost]: ')
+    address = address or 'localhost'
+    
+    port = raw_input('SIB port [default=10010]: ')
+    port = port or 10010
+    
+    client = HistoryClient(address, port)
     menu = '\n'.join((
         '1 - Make a history request',
         '2 - Remove history request',
@@ -322,4 +326,10 @@ def main():
          
 
 if __name__ == "__main__":
+    
+    print """
+You launched the History Service Client as a command line script, which is fine
+only for development and debugging purpose. This file has been designed to be 
+an importable library, thus please use it as it was intended."""
+    
     main()

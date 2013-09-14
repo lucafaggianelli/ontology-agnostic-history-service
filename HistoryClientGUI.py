@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import sys, time
+import sys, time, getopt
 from HistoryClient import *
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
@@ -8,11 +8,13 @@ from PyQt4.Qt import *
 class MainWindow(QMainWindow):
     
     def __init__(self):
+        global config
+        
         # Init parent class for resizing etc...
         QMainWindow.__init__(self)
         
         # History Client
-        self.client = HistoryClient()
+        self.client = HistoryClient(config['sib_address'], config['sib_port'])
         #self.requests = {}
         self.readResponseSubscriptions = []
         
@@ -185,10 +187,79 @@ class HistoryReadResponseHandler():
             #for var in result:
             #    print str(i)+') '+var[0]+' = '+var[2]+'; '+var[1]
 
-# Set up the main window
-app = QApplication(sys.argv)
-main = MainWindow()
-main.show()
 
-# Launches QT app main window and returns when it close
-sys.exit(app.exec_())
+def _usage():
+    """
+    Print the usage page. Accessed running the script with -h or --help
+    """
+    
+    print """
+Help for the History Service
+    -h --help : Show this help page
+    
+General config:
+
+    -l --log : Set log level. Case insensitive options: SQL, DEBUG, INFO, WARNING, ERROR, CRITICAL. Be aware that SQL debug level is extremely verbose! Default is WARNING.
+    
+
+SIB config:
+
+    -s --sib : SIB IP address, default is 'localhost'
+    -p --port : SIB port, default is '10010'
+    """
+    
+
+def _set_commandline_options(argv):
+    
+    global config
+    config = {}
+    
+    # Default values
+    config['log_level'] = 'WARNING'
+
+    config['sib_address'] = 'localhost'
+    config['sib_port'] = 10010
+
+    try:
+        # Parse options
+        opts, args = getopt.getopt(argv, "hl:s:p:", 
+            ["help", "log=", 'sib=', 'port='])
+        
+        # Set options
+        for opt, arg in opts:
+            
+            # Help and exit
+            if opt in ("-h", "--help"):
+                _usage()
+                sys.exit()
+
+            # Set log level
+            elif opt in ('-l', '--log'):                
+                config['log_level'] = arg.upper()
+            
+            # SIB address and port
+            elif opt in ('s', 'sib'):
+                config['sib_address'] = arg
+            
+            elif opt in ('p', 'port'):
+                config['sib_port'] = arg
+                
+                
+    except getopt.GetoptError:
+        _usage()
+        sys.exit(2)
+        
+    return opts, args
+
+
+if __name__ == "__main__":
+    # Set opts
+    _set_commandline_options(sys.argv[1:])
+    
+    # Set up the main window
+    app = QApplication(sys.argv)
+    main = MainWindow()
+    main.show()
+    
+    # Launches QT app main window and returns when it close
+    sys.exit(app.exec_())

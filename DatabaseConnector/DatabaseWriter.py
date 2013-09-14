@@ -27,19 +27,30 @@ class DatabaseWriter:
     """
 
     def __init__(self, host, user, password, db_name, rebuild_db = False,
-                 db_adapter = 'mysql'):
-        
-        # Import the right adapter
-        try:
-            self.dbAdapter = importlib.import_module('DatabaseConnector.mysql_adapter')
-        except:
-            sys.exit()
-                
+                 db_adapter = 'mysql', log_level = 'WARNING'):
+
         # Logger
         logging.addLevelName(SQL_LOGGER_LVL, "SQL")
         logging.Logger.sql = sql_logger
         logging.setLoggerClass(ColoredLogger)
         self.logger = logging.getLogger('DatabaseWriter')
+        
+        # Set logging level
+        numeric_level = getattr(logging, log_level, None)
+        if not isinstance(numeric_level, int):
+            raise ValueError('Invalid log level: %s' % log_level)
+        self.logger.setLevel(numeric_level)
+        
+        
+        # Import the right adapter
+        try:
+            self.dbAdapter = importlib.import_module('DatabaseConnector.%s_adapter'
+                                % db_adapter.lower() )
+        except:
+            self.logger.critical('Adapter "%s" not valid or not found in ./DatabaseConnector'
+                                 % db_adapter )
+            sys.exit()
+
 
         # Regex
         self.matchAngleBrackets = re.compile(r"<(.*)>")
